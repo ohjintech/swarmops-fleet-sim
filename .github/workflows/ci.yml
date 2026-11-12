@@ -1,0 +1,51 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: swarmops-fleet-sim
+      # Until contracts is released, check it out next to this repo so the path source resolves.
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/swarmops-contracts
+          path: swarmops-contracts
+      - uses: astral-sh/setup-uv@v6
+      - working-directory: swarmops-fleet-sim
+        run: |
+          uv sync
+          uv run ruff check .
+          uv run pytest -q
+
+  image:
+    if: github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: swarmops-fleet-sim
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/swarmops-contracts
+          path: swarmops-contracts
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: swarmops-fleet-sim/Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/swarmops-fleet-sim:latest,ghcr.io/${{ github.repository_owner }}/swarmops-fleet-sim:${{ github.sha }}
